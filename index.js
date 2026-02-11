@@ -6,37 +6,50 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ✅ ROOT ROUTE (THIS FIXES YOUR ERROR)
 app.get("/", (req, res) => {
   res.send("GYAN Backend is Live 🚀");
 });
 
-// ✅ ASK ROUTE
 app.post("/ask", async (req, res) => {
   const { message } = req.body;
 
   if (!message) {
-    return res.json({ reply: "No message received." });
+    return res.json({ reply: "Please ask something." });
   }
 
   try {
-    const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(
-      message
-    )}&format=json`;
+    // 1️⃣ Try Wikipedia First
+    const wikiUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(message)}`;
+    
+    try {
+      const wikiResponse = await axios.get(wikiUrl);
+      if (wikiResponse.data.extract) {
+        return res.json({ reply: wikiResponse.data.extract });
+      }
+    } catch (wikiError) {
+      // If Wikipedia fails, continue to DuckDuckGo
+    }
 
-    const response = await axios.get(url);
-    const data = response.data;
+    // 2️⃣ Fallback to DuckDuckGo
+    const ddgUrl = `https://api.duckduckgo.com/?q=${encodeURIComponent(message)}&format=json`;
+    const ddgResponse = await axios.get(ddgUrl);
+    const data = ddgResponse.data;
 
     if (data.AbstractText) {
-      res.json({ reply: data.AbstractText });
-    } else {
-      res.json({
-        reply: "I searched online but no clear answer found.",
-      });
+      return res.json({ reply: data.AbstractText });
     }
+
+    if (data.RelatedTopics && data.RelatedTopics.length > 0) {
+      return res.json({ reply: data.RelatedTopics[0].Text });
+    }
+
+    return res.json({
+      reply: "I searched online but could not find clear information."
+    });
+
   } catch (error) {
-    res.json({
-      reply: "Error while fetching online data.",
+    return res.json({
+      reply: "Server error while searching."
     });
   }
 });
